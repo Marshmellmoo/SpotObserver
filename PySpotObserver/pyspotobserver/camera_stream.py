@@ -34,6 +34,7 @@ class ImageFrame:
         timestamp: Time when frame was captured (monotonic clock)
         acquisition_time: Robot's acquisition time from image response
     """
+
     rgb_images: List[np.ndarray]
     depth_images: List[np.ndarray]
     camera_order: List[CameraType]
@@ -43,6 +44,7 @@ class ImageFrame:
 
 class SpotCamStreamError(Exception):
     """Base exception for SpotCamStream errors."""
+
     pass
 
 
@@ -104,9 +106,13 @@ class SpotCamStream:
         # Color correction matrices (None if robot IP is not recognized)
         self._ccms: Optional[dict] = _ROBOT_CCMS.get(config.robot_ip)
         if self._ccms is not None:
-            logger.info(f"SpotCamStream '{stream_id}': Color correction enabled for {config.robot_ip}")
+            logger.info(
+                f"SpotCamStream '{stream_id}': Color correction enabled for {config.robot_ip}"
+            )
         else:
-            logger.info(f"SpotCamStream '{stream_id}': No color correction (unrecognized IP {config.robot_ip})")
+            logger.info(
+                f"SpotCamStream '{stream_id}': No color correction (unrecognized IP {config.robot_ip})"
+            )
 
         # Statistics
         self._frame_count = 0
@@ -155,9 +161,7 @@ class SpotCamStream:
         if camera_mask == 0:
             raise SpotCamStreamError("Camera mask cannot be zero")
         if camera_mask & ~self._valid_camera_mask():
-            raise SpotCamStreamError(
-                f"Camera mask contains unknown bits: {camera_mask:#x}"
-            )
+            raise SpotCamStreamError(f"Camera mask contains unknown bits: {camera_mask:#x}")
 
         # Parse camera mask to get ordered list of cameras
         self._camera_mask = camera_mask
@@ -275,9 +279,7 @@ class SpotCamStream:
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise SpotCamStreamError(
-                        f"Timeout waiting for images (timeout={timeout}s)"
-                    )
+                    raise SpotCamStreamError(f"Timeout waiting for images (timeout={timeout}s)")
                 wait_timeout = min(wait_timeout, remaining)
 
             try:
@@ -322,9 +324,7 @@ class SpotCamStream:
         loop = asyncio.get_event_loop()
 
         if not run_pipeline:
-            return await loop.run_in_executor(
-                None, self.get_current_images, timeout, copy, False
-            )
+            return await loop.run_in_executor(None, self.get_current_images, timeout, copy, False)
 
         # Run full pipeline in executor
         def _get_and_process():
@@ -451,7 +451,7 @@ class SpotCamStream:
                     rgb_source,
                     quality_percent=self._config.image_quality_percent,
                     image_format=image_pb2.Image.FORMAT_JPEG,
-                    pixel_format=image_pb2.Image.PIXEL_FORMAT_RGB_U8
+                    pixel_format=image_pb2.Image.PIXEL_FORMAT_RGB_U8,
                 )
             )
 
@@ -507,12 +507,8 @@ class SpotCamStream:
         self._frame_pool_index = 0
 
         for _ in range(pool_size):
-            rgb_images = [
-                np.zeros(shape, dtype=np.float32) for shape in rgb_shapes
-            ]
-            depth_images = [
-                np.zeros(shape, dtype=np.float32) for shape in depth_shapes
-            ]
+            rgb_images = [np.zeros(shape, dtype=np.float32) for shape in rgb_shapes]
+            depth_images = [np.zeros(shape, dtype=np.float32) for shape in depth_shapes]
             self._frame_pool.append(
                 ImageFrame(
                     rgb_images=rgb_images,
@@ -547,9 +543,7 @@ class SpotCamStream:
             try:
                 self._image_queue.put(frame, timeout=0.001)
             except Exception as e:
-                logger.warning(
-                    f"Stream '{self._stream_id}': Failed to enqueue frame: {e}"
-                )
+                logger.warning(f"Stream '{self._stream_id}': Failed to enqueue frame: {e}")
 
     def _peek_latest_frame(self) -> Optional[ImageFrame]:
         """
@@ -572,9 +566,7 @@ class SpotCamStream:
         expected_count = n_cameras * 2  # RGB + depth per camera
 
         if len(responses) != expected_count:
-            raise SpotCamStreamError(
-                f"Expected {expected_count} responses, got {len(responses)}"
-            )
+            raise SpotCamStreamError(f"Expected {expected_count} responses, got {len(responses)}")
 
         for i in range(n_cameras):
             rgb_idx = i * 2
@@ -584,12 +576,9 @@ class SpotCamStream:
             if self._ccms is not None:
                 ccm = self._ccms[self._camera_order[i]]
             self._convert_image_response_inplace(
-                responses[rgb_idx],
-                is_depth=False,
-                out_array=frame.rgb_images[i],
-                ccm=ccm
+                responses[rgb_idx], is_depth=False, out_array=frame.rgb_images[i], ccm=ccm
             )
-           
+
             self._convert_image_response_inplace(
                 responses[depth_idx],
                 is_depth=True,
@@ -642,9 +631,7 @@ class SpotCamStream:
         expected_count = n_cameras * 2  # RGB + depth per camera
 
         if len(responses) != expected_count:
-            raise SpotCamStreamError(
-                f"Expected {expected_count} responses, got {len(responses)}"
-            )
+            raise SpotCamStreamError(f"Expected {expected_count} responses, got {len(responses)}")
 
         decoded: List[np.ndarray] = []
         for i in range(n_cameras):
@@ -682,12 +669,12 @@ class SpotCamStream:
 
             if is_depth:
                 if pixel_format != image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:
-                    raise SpotCamStreamError(
-                        f"Unexpected depth pixel format: {pixel_format}"
-                    )
+                    raise SpotCamStreamError(f"Unexpected depth pixel format: {pixel_format}")
                 img_data = np.frombuffer(image_proto.data, dtype=np.uint16)
                 img = img_data.reshape((rows, cols))
-                depth_scale = response.source.depth_scale if response.source.depth_scale > 0 else 1.0
+                depth_scale = (
+                    response.source.depth_scale if response.source.depth_scale > 0 else 1.0
+                )
                 return img.astype(np.float32) / depth_scale
 
             if pixel_format == image_pb2.Image.PIXEL_FORMAT_RGB_U8:
@@ -706,20 +693,16 @@ class SpotCamStream:
                 img = np.stack([img] * 3, axis=-1)
                 return img.astype(np.float32) / 255.0
 
-            raise SpotCamStreamError(
-                f"Unsupported pixel format: {pixel_format}"
-            )
+            raise SpotCamStreamError(f"Unsupported pixel format: {pixel_format}")
 
-        raise SpotCamStreamError(
-            f"Unsupported image format: {image_proto.format}"
-        )
+        raise SpotCamStreamError(f"Unsupported image format: {image_proto.format}")
 
     def _convert_image_response_inplace(
         self,
         response: image_pb2.ImageResponse,
         is_depth: bool,
         out_array: np.ndarray,
-        ccm: Optional[np.ndarray] = None
+        ccm: Optional[np.ndarray] = None,
     ) -> None:
         """
         Convert ImageResponse protobuf to numpy array in-place.
@@ -768,9 +751,7 @@ class SpotCamStream:
             if is_depth:
                 # Depth image (16-bit unsigned)
                 if pixel_format != image_pb2.Image.PIXEL_FORMAT_DEPTH_U16:
-                    raise SpotCamStreamError(
-                        f"Unexpected depth pixel format: {pixel_format}"
-                    )
+                    raise SpotCamStreamError(f"Unexpected depth pixel format: {pixel_format}")
 
                 # Parse as uint16
                 img_data = np.frombuffer(image_proto.data, dtype=np.uint16)
@@ -782,7 +763,9 @@ class SpotCamStream:
                     )
 
                 # Convert to meters using depth scale
-                depth_scale = response.source.depth_scale if response.source.depth_scale > 0 else 1.0
+                depth_scale = (
+                    response.source.depth_scale if response.source.depth_scale > 0 else 1.0
+                )
                 np.multiply(img, 1.0 / depth_scale, out=out_array, casting="unsafe")
                 return
 
@@ -842,14 +825,10 @@ class SpotCamStream:
                     return
 
                 else:
-                    raise SpotCamStreamError(
-                        f"Unsupported pixel format: {pixel_format}"
-                    )
+                    raise SpotCamStreamError(f"Unsupported pixel format: {pixel_format}")
 
         else:
-            raise SpotCamStreamError(
-                f"Unsupported image format: {image_proto.format}"
-            )
+            raise SpotCamStreamError(f"Unsupported image format: {image_proto.format}")
 
     def _get_ccm_scratch(self, shape: Tuple[int, ...]) -> np.ndarray:
         scratch = self._ccm_scratch_by_shape.get(shape)
